@@ -707,7 +707,10 @@ function renderCharts(segmentOccupancy, stationBoardings, stationDeboardings, to
                         anchor: 'end',
                         align: 'top',
                         offset: 2,
-                        color: '#00E5FF',
+                        color: function(context) {
+                            return context.datasetIndex === 0 ? '#26de81' : '#ff4757';
+                        },
+                        strokeWidth: 0.5,
                         font: { size: 9, weight: 'bold' },
                         formatter: (value) => value > 0 ? value.toLocaleString() : ''
                     }
@@ -734,12 +737,26 @@ function renderCharts(segmentOccupancy, stationBoardings, stationDeboardings, to
                         anchor: 'end',
                         align: 'top',
                         offset: 4,
-                        color: '#FFD700',
-                        font: { size: 10, weight: 'bold' },
-                        formatter: (value) => value.toLocaleString()
+                        color: '#764ba2',
+                        strokeColor: '#4a2a7a',
+                        strokeWidth: 1,
+                        fontWeight: 'bold',
+                        font: { size: 10 },
+                        formatter: function(value) {
+                            if (value === undefined || value === null) return '';
+                            return Number(value).toLocaleString();
+                        },
+                        rotation: 0
                     }
                 },
-                scales: { y: { beginAtZero: true } }
+                scales: { 
+                    y: { 
+                        beginAtZero: true,
+                        title: { display: true, text: 'Number of Passengers' }
+                    }
+                },
+                maintainAspectRatio: true,
+                responsive: true
             }
         });
     }
@@ -751,76 +768,154 @@ function setupDownloadButtons() {
     const odMatrixBtn = document.getElementById('downloadOdMatrixBtn');
 
     if (odChartBtn) {
-        odChartBtn.onclick = () => downloadChartAsImage('odChart', 'od_chart_report', 3);
+        odChartBtn.onclick = () => downloadChartAsImage('odChart', `od_chart_${currentReportData?.trainName?.replace(/\s/g, '_') || 'report'}`, 3);
     }
     if (stationChartBtn) {
-        stationChartBtn.onclick = () => downloadChartAsImage('stationChart', 'station_chart_report', 3);
+        stationChartBtn.onclick = () => downloadChartAsImage('stationChart', `station_chart_${currentReportData?.trainName?.replace(/\s/g, '_') || 'report'}`, 3);
     }
     if (odMatrixBtn) {
-        odMatrixBtn.onclick = async () => {
-            const el = document.getElementById('odMatrixContainer');
-            if (!el) return showNotification('OD matrix not found', 'error');
-            const canvas = await html2canvas(el, { scale: 3 });
-            const link = document.createElement('a');
-            link.download = 'od_matrix_report.png';
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            showNotification('✓ OD matrix downloaded!', 'success');
-        };
+        odMatrixBtn.onclick = downloadOdMatrixAsImage;
     }
 }
 
-function downloadChartAsImage(chartId, filename, scale = 3) {
+function downloadOdMatrixAsImage() {
+    const matrixContainer = document.querySelector('.od-matrix-container');
+    if (!matrixContainer) { showNotification("OD Matrix not found", "error"); return; }
+    
+    showNotification("📸 Capturing OD Matrix in high quality...", "info");
+    
+    // Temporarily modify container for better capture
+    const originalOverflow = matrixContainer.style.overflow;
+    matrixContainer.style.overflow = 'visible';
+    
+    html2canvas(matrixContainer, {
+        scale: 4,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        windowWidth: matrixContainer.scrollWidth,
+        windowHeight: matrixContainer.scrollHeight,
+        onclone: (clonedDoc, element) => {
+            // Improve table rendering in clone
+            const tables = clonedDoc.querySelectorAll('table');
+            tables.forEach(table => {
+                table.style.fontSize = '14px';
+                table.style.borderCollapse = 'separate';
+            });
+        }
+    }).then(canvas => {
+        matrixContainer.style.overflow = originalOverflow;
+        
+        // Create ultra high-res version
+        const finalCanvas = document.createElement('canvas');
+        const ctx = finalCanvas.getContext('2d');
+        const scale = 2;
+        finalCanvas.width = canvas.width * scale;
+        finalCanvas.height = canvas.height * scale;
+        
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+        
+        const link = document.createElement('a');
+        const trainName = currentReportData?.trainName?.replace(/\s/g, '_') || 'report';
+        link.download = `od_matrix_${trainName}_hq.png`;
+        link.href = finalCanvas.toDataURL('image/png', 1.0);
+        link.click();
+        showNotification("✓ High-res OD Matrix downloaded!", "success");
+    }).catch(err => {
+        matrixContainer.style.overflow = originalOverflow;
+        showNotification("Failed to capture OD Matrix", "error");
+    });
+}
+
+function downloadChartAsImage(chartId, filename, scale = 5) {
     const canvas = document.getElementById(chartId);
-    if (!canvas) {
-        showNotification(`Chart ${chartId} not found`, 'error');
+    if (!canvas) { showNotification(`Chart ${chartId} not found`, "error"); return; }
+    
+    showNotification(`📸 Capturing ${filename} in high quality...`, "info");
+    
+    // Get the chart instance
+    const chart = Chart.getChart(chartId);
+    if (!chart) {
+        showNotification(`Chart ${chartId} not initialized`, "error");
         return;
     }
     
-    const originalCanvas = canvas;
-    const highResCanvas = document.createElement('canvas');
-    const ctx = highResCanvas.getContext('2d');
+    // Store original options
+    let originalDevicePixelRatio = chart.config.options.devicePixelRatio;
     
-    const width = originalCanvas.width;
-    const height = originalCanvas.height;
-    highResCanvas.width = width * scale;
-    highResCanvas.height = height * scale;
+    // Temporarily increase device pixel ratio
+    chart.config.options.devicePixelRatio = 4;
+    chart.update();
     
-    ctx.scale(scale, scale);
-    ctx.drawImage(originalCanvas, 0, 0, width, height);
-    
-    const link = document.createElement('a');
-    link.download = `${filename}.png`;
-    link.href = highResCanvas.toDataURL('image/png');
-    link.click();
-    
-    showNotification(`✓ ${filename} downloaded!`, 'success');
+    // Use a temporary canvas with higher scale
+    setTimeout(() => {
+        const originalCanvas = canvas;
+        const highResCanvas = document.createElement('canvas');
+        const ctx = highResCanvas.getContext('2d');
+        
+        // Enable anti-aliasing for smoother edges
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        const width = originalCanvas.width;
+        const height = originalCanvas.height;
+        highResCanvas.width = width * scale;
+        highResCanvas.height = height * scale;
+        
+        // Draw with high quality interpolation
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.scale(scale, scale);
+        ctx.drawImage(originalCanvas, 0, 0, width, height);
+        
+        // Reset chart device pixel ratio
+        chart.config.options.devicePixelRatio = originalDevicePixelRatio || 1;
+        chart.update();
+        
+        // Convert to PNG with high quality
+        const link = document.createElement('a');
+        link.download = `${filename}_hq.png`;
+        link.href = highResCanvas.toDataURL('image/png');
+        link.click();
+        
+        showNotification(`✓ ${filename} high-res image saved!`, "success");
+    }, 100);
 }
 
 async function copyFullReportToClipboard() {
     if (!currentReportData) {
-        showNotification('No report to copy. Generate a report first.', 'error');
+        showNotification("No report to copy. Generate a report first.", "error");
         return;
     }
     
-    let plainText = "=".repeat(60) + "\n";
-    plainText += "🚂 TRAIN CHART OCCUPANCY REPORT\n";
-    plainText += "=".repeat(60) + "\n\n";
+    const screenshotArea = document.getElementById('screenshot-area');
+    if (!screenshotArea) {
+        showNotification("Report content not found", "error");
+        return;
+    }
     
-    const trainName = currentReportData.trainName || currentReportData.trainType || "Train";
-    const trainType = currentReportData.trainType || "";
+    // Create a temporary div to extract text content with formatting
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = currentReportHTML;
+    
+    // Extract plain text with formatting markers
+    let plainText = "=" .repeat(60) + "\n";
+    plainText += "🚂 TRAIN CHART OCCUPANCY REPORT\n";
+    plainText += "=" .repeat(60) + "\n\n";
+    
+    // Extract train info
+    const trainName = currentReportData.trainName || "Express";
     const trainNumber = currentReportData.trainNumber || "XXXX";
     const originStation = currentReportData.originStation || TRAIN_ROUTE[0];
     const destinationStation = currentReportData.destinationStation || TRAIN_ROUTE[TRAIN_ROUTE.length-1];
     
-    plainText += `TRAIN: ${trainNumber} ${trainName}${trainType && trainType !== trainName ? ` (${trainType})` : ''}\n`;
-    plainText += `FROM/TO: ${originStation} → ${destinationStation}\n`;
-    plainText += `JOURNEY DATE: ${formatJourneyDate(currentReportData.journeyDate) || 'Not available'}\n`;
-    plainText += `RUNNING DAYS: ${(currentReportData.runningDays || []).join(', ') || 'Not available'}\n`;
-    plainText += `DISTANCE/TIME: ${currentReportData.distanceKm || 'N/A'} km | ${currentReportData.startTime || 'N/A'} → ${currentReportData.endTime || 'N/A'} | ${currentReportData.duration || 'N/A'}\n`;
-    plainText += `ROUTE: ${(currentReportData.route || TRAIN_ROUTE).join(' → ')}\n`;
+    plainText += `TRAIN: ${trainName} (${trainNumber})\n`;
+    plainText += `ROUTE: ${originStation} → ${destinationStation} (via ${TRAIN_ROUTE.length} stations)\n`;
     plainText += "-".repeat(60) + "\n\n";
     
+    // Statistics
     plainText += `📊 KEY STATISTICS:\n`;
     plainText += `   Total Passengers: ${currentReportData.totalPassengers.toLocaleString()}\n`;
     plainText += `   Total Seats: ${currentReportData.totalSeats.toLocaleString()}\n`;
@@ -829,13 +924,44 @@ async function copyFullReportToClipboard() {
     plainText += `   Average Segment Load: ${currentReportData.avgOccupancy}\n`;
     plainText += `   Peak Occupancy: ${currentReportData.maxOccupancy}\n`;
     
-    plainText += `\n⏰ Generated: ${new Date().toLocaleString()}\n`;
-    plainText += "=".repeat(60) + "\n";
+    // Top segments
+    plainText += `\n🔥 TOP 10 BUSIEST SEGMENTS:\n`;
+    const sortedSegments = Object.entries(currentReportData.segmentOccupancy).filter(([_,v]) => v>0).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    sortedSegments.forEach(([seg, count], idx) => {
+        plainText += `   ${idx+1}. ${seg}: ${count.toLocaleString()} passengers\n`;
+    });
     
+    // Top boarding stations
+    plainText += `\n🚉 TOP BOARDING STATIONS:\n`;
+    const topBoardings = Object.entries(currentReportData.stationBoardings).sort((a,b)=>b[1]-a[1]).slice(0,15);
+    topBoardings.forEach(([st, count]) => {
+        plainText += `   ${st}: ${count.toLocaleString()} boardings\n`;
+    });
+    
+    // Top deboarding stations
+    plainText += `\n🚉 TOP DEBOARDING STATIONS:\n`;
+    const topDeboardings = Object.entries(currentReportData.stationDeboardings).sort((a,b)=>b[1]-a[1]).slice(0,15);
+    topDeboardings.forEach(([st, count]) => {
+        plainText += `   ${st}: ${count.toLocaleString()} deboardings\n`;
+    });
+    
+    plainText += `\n📅 Generated: ${new Date().toLocaleString()}\n`;
+    plainText += "=" .repeat(60) + "\n";
+    
+    // Copy to clipboard using modern API
     try {
         await navigator.clipboard.writeText(plainText);
+        
+        // Add visual feedback on the report area
+        const screenshotDiv = document.getElementById('screenshot-area');
+        if (screenshotDiv) {
+            screenshotDiv.classList.add('copy-highlight');
+            setTimeout(() => screenshotDiv.classList.remove('copy-highlight'), 500);
+        }
+        
         showNotification("✓ Full report copied to clipboard! (Text format)", "success");
     } catch (err) {
+        // Fallback for older browsers
         const textarea = document.createElement('textarea');
         textarea.value = plainText;
         document.body.appendChild(textarea);
@@ -846,6 +972,41 @@ async function copyFullReportToClipboard() {
     }
 }
 
+async function captureScreenshot() {
+    const element = document.getElementById('screenshot-area');
+    if (!element) { showNotification("Generate report first...", "error"); return null; }
+    showNotification("📸 Capturing high-quality screenshot...", "info");
+    try {
+        const originalStyle = element.style.cssText;
+        element.style.overflow = 'visible';
+        
+        const canvas = await html2canvas(element, { 
+            scale: 4,
+            backgroundColor: '#ffffff',
+            logging: false,
+            useCORS: true,
+            allowTaint: false,
+            windowWidth: element.scrollWidth,
+            windowHeight: element.scrollHeight,
+            onclone: (clonedDoc, element) => {
+                // Ensure charts render properly in clone
+                const clonedCharts = clonedDoc.querySelectorAll('canvas');
+                clonedCharts.forEach(canvas => {
+                    canvas.style.maxWidth = '100%';
+                    canvas.style.height = 'auto';
+                });
+            }
+        });
+        
+        element.style.cssText = originalStyle;
+        showNotification("✅ High-res screenshot ready!", "success");
+        return canvas;
+    } catch(err) {
+        showNotification("❌ Screenshot failed: " + err.message, "error");
+        return null;
+    }
+}
+
 // ============================================================
 // EVENT LISTENERS & INITIALIZATION
 // ============================================================
@@ -853,6 +1014,37 @@ document.addEventListener('DOMContentLoaded', function() {
     setupFileUpload();
     
     document.getElementById('copyFullReportBtn').addEventListener('click', copyFullReportToClipboard);
+    
+    document.getElementById('screenshotBtn').addEventListener('click', async () => {
+        const canvas = await captureScreenshot();
+        if (canvas) {
+            const link = document.createElement('a');
+            // Uses the 0th index name logic we discussed or fallback
+            const name = currentReportData?.trainName?.split(' ')[0] || 'Train';
+            link.download = `${name}_Report_${new Date().getTime()}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+            showNotification("✅ Image saved!", "success");
+        }
+    });
+    
+    document.getElementById('twitterShareBtn').addEventListener('click', async () => {
+        const canvas = await captureScreenshot();
+        if (canvas && currentReportData) {
+            const trainName = currentReportData.trainName || 'Train';
+            const trainNumber = currentReportData.trainNumber || '';
+            const passengers = currentReportData.totalPassengers?.toLocaleString() || 'N/A';
+            const text = encodeURIComponent(`🚆 ${trainName} ${trainNumber} | ${passengers} passengers | Route: ${currentReportData.originStation} → ${currentReportData.destinationStation}\n\n#TrainAnalytics #RailwayData`);
+            canvas.toBlob((blob) => {
+                const link = document.createElement('a');
+                link.download = `twitter_${trainName.replace(/\s/g, '_')}.png`;
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+                window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+                showNotification("📤 Image downloaded! Tweet window opened — attach the screenshot.", "info");
+            }, 'image/png');
+        }
+    });
     
     document.getElementById('processBtn').addEventListener('click', processFiles);
 });
