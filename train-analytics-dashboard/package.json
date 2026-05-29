@@ -1,0 +1,32 @@
+{
+  "name": "train-analytics-dashboard",
+  "version": "1.0.0",
+  "description": "A professional web application for analyzing train occupancy data with dynamic route editing",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server .",
+    "serve": "python -m http.server 8000"
+  },
+  "keywords": [
+    "train",
+    "analytics",
+    "occupancy",
+    "dashboard",
+    "data-visualization",
+    "charts"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "dependencies": {
+    "chart.js": "^3.9.1",
+    "chartjs-plugin-datalabels": "^2.0.0",
+    "html2canvas": "^1.4.1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

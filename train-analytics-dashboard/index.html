@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Train Analytics Dashboard</title>
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
+    <!-- Provide a default route (page-level default only) -->
+    <script>
+        window.DEFAULT_TRAIN_ROUTE = [
+            "CUPJ","CDM","SY","MV","KTM","ADT","KMU","PML","TJ",
+            "BAL","TRB","TPJ","TP","KLT","KRR","PGR","KMD","URL",
+            "ED","SA","DPJ","HSRA","CRLM","BNCE","BNC","SBC","KGI",
+            "MAD","MYA","MYS"
+        ];
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚂 Train Chart Occupancy Dashboard</h1>
+            <p>Single JSON Upload | Share Report | Chart Preparation Report</p>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" accept=".json,.txt" multiple>
+                <p>📁 Click or Drag & Drop to upload JSON file(s)</p>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">Format: collector JSON with train info, route, coach details, and coaches</p>
+                <p style="font-size: 12px; color: #999; margin-top: 5px;">Older array-only coach JSON files are still supported</p>
+            </div>
+            <div id="fileInfo" class="file-info"></div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <button id="processBtn" disabled>📊 Generate Analytics Report</button>
+        </div>
+
+        <!-- Share Toolbar -->
+        <div id="shareToolbar" class="share-toolbar" style="display: none;">
+            <button class="share-btn copy-btn" id="copyFullReportBtn">📋 Copy Full Report to Clipboard</button>
+            <button class="share-btn screenshot-btn" id="screenshotBtn">📸 Capture Screenshot</button>
+            <button class="share-btn" id="twitterShareBtn">🐦 Share on Twitter</button>
+        </div>
+
+        <div id="reportContent"></div>
+    </div>
+
+    <!-- Main JS -->
+    <script src="js/app.js"></script>
+</body>
+</html>
