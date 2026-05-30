@@ -354,8 +354,14 @@ tr:hover { background: #f5f5f5; }
     z-index: 5;
 }
 
-.od-matrix tr:hover td { background: #f5f5f5; }
-.od-matrix tr:hover td:first-child { background: #e9ecef; }
+/* Row hover: subtle highlight and keep text readable */
+.od-matrix tr:hover td { background: #f0f4ff; color: #1f2937; }
+.od-matrix tr:hover td:first-child { background: #e6eefc; color: #1f2937; }
+
+/* Preserve class color contrast when hovering rows */
+.od-matrix tr:hover td.od-cell-high { background: #ff6b75; color: #ffffff; }
+.od-matrix tr:hover td.od-cell-medium { background: #ffb14d; color: #ffffff; }
+.od-matrix tr:hover td.od-cell-low { background: #34d399; color: #ffffff; }
 
 .od-cell-zero { background: #f8f9fa; color: #ccc; }
 .od-cell-high { background: #ff4757; color: white; font-weight: bold; }
@@ -371,7 +377,6 @@ canvas {
 
 .od-matrix-container {
     -webkit-font-smoothing: antialiased;
-    font-smoothing: antialiased;
 }
 
 /* Ensure high-res download button */

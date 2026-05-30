@@ -413,6 +413,10 @@ function generateReport(allCoaches) {
     const segmentOccupancy = {};
     const stationBoardings = {};
     const stationDeboardings = {};
+    const stationClassBoardings = {};
+    const stationClassDeboardings = {};
+    const stationClassOd = {};
+    const classSeatTotals = {};
     const stationBookings = {};
     const odMatrix = {};
     const coachPassengers = {};
@@ -426,8 +430,12 @@ function generateReport(allCoaches) {
     // Process each coach using the sample JSON schema (coach.bdd -> berth.bsd)
     allCoaches.forEach((coach, cIdx) => {
         if (!coach.bdd || !Array.isArray(coach.bdd)) return;
-        coachPassengers[coach.coachName || `Coach_${cIdx+1}`] = coach.bdd.length;
+        const coachNameKey = coach.coachName || `Coach_${cIdx+1}`;
+        const coachClass = coach.coachClass || coach.coach_type || coach.class || coach.type || 'Unknown';
+        coachPassengers[coachNameKey] = coach.bdd.length;
         totalSeats += coach.bdd.length;
+        // accumulate seats per coach class for occupied/total display
+        classSeatTotals[coachClass] = (classSeatTotals[coachClass] || 0) + coach.bdd.length;
 
         for (const berth of coach.bdd) {
             if (!berth.bsd || !Array.isArray(berth.bsd)) continue;
@@ -454,6 +462,15 @@ function generateReport(allCoaches) {
                 stationBoardings[journeyStart] = (stationBoardings[journeyStart] || 0) + 1;
                 stationBookings[journeyStart] = (stationBookings[journeyStart] || 0) + 1;
                 stationDeboardings[journeyEnd] = (stationDeboardings[journeyEnd] || 0) + 1;
+                // Track class-wise boardings/deboardings per station
+                stationClassBoardings[journeyStart] = stationClassBoardings[journeyStart] || {};
+                stationClassBoardings[journeyStart][coachClass] = (stationClassBoardings[journeyStart][coachClass] || 0) + 1;
+                stationClassDeboardings[journeyEnd] = stationClassDeboardings[journeyEnd] || {};
+                stationClassDeboardings[journeyEnd][coachClass] = (stationClassDeboardings[journeyEnd][coachClass] || 0) + 1;
+                // Track class-wise OD (origin -> destination -> class)
+                stationClassOd[journeyStart] = stationClassOd[journeyStart] || {};
+                stationClassOd[journeyStart][journeyEnd] = stationClassOd[journeyStart][journeyEnd] || {};
+                stationClassOd[journeyStart][journeyEnd][coachClass] = (stationClassOd[journeyStart][journeyEnd][coachClass] || 0) + 1;
                 odMatrix[journeyStart] = odMatrix[journeyStart] || {};
                 odMatrix[journeyStart][journeyEnd] = (odMatrix[journeyStart][journeyEnd] || 0) + 1;
 
@@ -477,6 +494,15 @@ function generateReport(allCoaches) {
 
     const top10Boarding = Object.entries(stationBoardings).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,c])=>({station:s,count:c}));
     const top10Deboarding = Object.entries(stationDeboardings).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([s,c])=>({station:s,count:c}));
+
+    // compute cumulative station load (bookings on - deboards off) along the route
+    const stationLoad = {};
+    let cumulativeLoad = 0;
+    for (const station of TRAIN_ROUTE) {
+        cumulativeLoad += (stationBoardings[station] || 0);
+        cumulativeLoad -= (stationDeboardings[station] || 0);
+        stationLoad[station] = cumulativeLoad;
+    }
 
     // determine origin/destination based on boardings/deboardings
     let originStation = TRAIN_ROUTE[0];
@@ -543,8 +569,14 @@ function generateReport(allCoaches) {
         stationBoardings,
         stationDeboardings,
         stationBookings,
+        stationLoad,
         odMatrix,
         coachPassengers
+        ,
+        stationClassBoardings,
+        stationClassDeboardings,
+        stationClassOd,
+        classSeatTotals
     };
 
     displayReport(currentReportData, topSegments, topODFlows, top10Boarding, top10Deboarding);
@@ -634,6 +666,18 @@ function displayReport(reportData, topSegments, topODFlows, top10Boarding, top10
         ['Duration', reportData.duration || 'Not available']
     ].map(([label, value]) => `<div class="journey-stat"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
 
+    // Build station-wise table (Boardings / Deboardings / Net Change / Bookings / Cumulative Load)
+    let stationTableHtml = `<div class="table-wrapper"><table><thead><tr><th>#</th><th>Station</th><th>Boardings</th><th>Deboardings</th><th>Net Change</th><th>Bookings</th><th>Cumulative Load</th></tr></thead><tbody>`;
+    TRAIN_ROUTE.forEach((station, idx) => {
+        const board = reportData.stationBoardings?.[station] || 0;
+        const deboard = reportData.stationDeboardings?.[station] || 0;
+        const net = board - deboard;
+        const bookings = reportData.stationBookings?.[station] || 0;
+        const load = reportData.stationLoad?.[station] ?? (board - deboard);
+        stationTableHtml += `<tr><td>${idx+1}</td><td><strong>${escapeHtml(station)}</strong></td><td>${board.toLocaleString()}</td><td>${deboard.toLocaleString()}</td><td style="color: ${net>=0?'#26de81':'#ff4757'};">${net>=0?'+':''}${net.toLocaleString()}</td><td>${bookings.toLocaleString()}</td><td>${load.toLocaleString()}</td></tr>`;
+    });
+    stationTableHtml += '</tbody></table></div>';
+
     const html = `
         <div id="screenshot-area">
             <div class="train-header-card">
@@ -666,12 +710,27 @@ function displayReport(reportData, topSegments, topODFlows, top10Boarding, top10
                 <h2>🚉 Station-wise Movement</h2>
                 <button id="downloadStationChartBtn" style="background: #26de81; margin-bottom: 15px;">📸 Download Station Chart as Image</button>
                 <div class="chart-container"><canvas id="stationChart"></canvas></div>
+                ${stationTableHtml}
             </div>
 
             <div class="section">
                 <h2>📊 Top 15 Passenger Flows</h2>
                 <button id="downloadOdChartBtn" style="background: #764ba2; margin-bottom: 15px;">📸 Download OD Chart as Image</button>
                 <div class="chart-container"><canvas id="odChart"></canvas></div>
+            </div>
+
+            <div class="section">
+                <h2>🧭 Class-wise Movement</h2>
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+                    <label for="classOriginSelector" style="font-weight:600;">Select Origin Station:</label>
+                    <select id="classOriginSelector" style="padding:8px;border-radius:6px;border:1px solid #ddd;background:white;">
+                        ${routeList.map(st => `<option value="${st}">${st}</option>`).join('')}
+                    </select>
+                    <button id="downloadClassChartBtn" style="background:#667eea;color:white;padding:8px 12px;border-radius:6px;">📸 Download Class Chart</button>
+                </div>
+                <div class="chart-container"><canvas id="classMovementChart"></canvas></div>
+                <div id="classMovementTable" class="table-wrapper" style="margin-top:12px;"></div>
+                <small style="display:block;margin-top:8px;color:#666;">Showing deboarding counts per destination station, broken down by coach class for the selected origin.</small>
             </div>
 
             <div class="section">
@@ -688,6 +747,114 @@ function displayReport(reportData, topSegments, topODFlows, top10Boarding, top10
     
     renderCharts(reportData.segmentOccupancy, reportData.stationBoardings, reportData.stationDeboardings, topSegments, topODFlows);
     setupDownloadButtons();
+
+    // --- Station class-wise UI ---
+    function renderStationClassTableFor(station) {
+        const boardMap = (currentReportData.stationClassBoardings && currentReportData.stationClassBoardings[station]) || {};
+        const deboardMap = (currentReportData.stationClassDeboardings && currentReportData.stationClassDeboardings[station]) || {};
+        const classes = Array.from(new Set([...Object.keys(boardMap), ...Object.keys(deboardMap)])).sort();
+        if (classes.length === 0) {
+            document.getElementById('stationClassTable').innerHTML = '<div class="warning">No class-wise boarding/deboarding data for this station.</div>';
+            return;
+        }
+        let tableHtml = '<table><thead><tr><th>Coach Class</th><th>Boardings</th><th>Deboardings</th><th>Total</th></tr></thead><tbody>';
+        let totalBoard = 0, totalDeboard = 0;
+        classes.forEach(cl => {
+            const b = boardMap[cl] || 0;
+            const d = deboardMap[cl] || 0;
+            totalBoard += b; totalDeboard += d;
+            tableHtml += `<tr><td><strong>${escapeHtml(cl)}</strong></td><td>${b.toLocaleString()}</td><td>${d.toLocaleString()}</td><td>${(b+d).toLocaleString()}</td></tr>`;
+        });
+        tableHtml += `<tr class="rank-1"><td><strong>Total</strong></td><td><strong>${totalBoard.toLocaleString()}</strong></td><td><strong>${totalDeboard.toLocaleString()}</strong></td><td><strong>${(totalBoard+totalDeboard).toLocaleString()}</strong></td></tr>`;
+        tableHtml += '</tbody></table>';
+        document.getElementById('stationClassTable').innerHTML = tableHtml;
+    }
+
+    const selector = document.getElementById('stationClassSelector');
+    if (selector) {
+        selector.addEventListener('change', (e) => renderStationClassTableFor(e.target.value));
+        // initial render
+        const initialStation = selector.value || routeList[0] || TRAIN_ROUTE[0];
+        renderStationClassTableFor(initialStation);
+    }
+
+    // --- Class-wise Movement chart and table ---
+    let classMovementChartInstance = null;
+    function renderClassMovementFor(origin) {
+        const odByClass = (currentReportData.stationClassOd && currentReportData.stationClassOd[origin]) || {};
+        // classes set
+        const classesSet = new Set();
+        for (const dest in odByClass) {
+            const m = odByClass[dest];
+            for (const cl in m) classesSet.add(cl);
+        }
+        const classes = Array.from(classesSet).sort();
+        const destinations = TRAIN_ROUTE.filter(s => s !== origin);
+        const classTotals = currentReportData.classSeatTotals || {};
+
+        const datasets = classes.map((cl, idx) => {
+            const colorPalette = ['#667eea','#764ba2','#26de81','#ff6b6b','#ffa502','#00b7c7','#ff4757','#a29bfe'];
+            const bg = colorPalette[idx % colorPalette.length];
+            return {
+                label: cl,
+                data: destinations.map(dest => (odByClass[dest] && odByClass[dest][cl]) || 0),
+                backgroundColor: bg
+            };
+        });
+
+        // render chart (stacked)
+        const ctx = document.getElementById('classMovementChart');
+        if (!ctx) return;
+        if (classMovementChartInstance) classMovementChartInstance.destroy();
+        classMovementChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: destinations, datasets },
+            options: {
+                plugins: { datalabels: { display: false } },
+                responsive: true,
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Passengers' } } }
+            }
+        });
+
+        // render table
+        if (!classes.length) {
+            document.getElementById('classMovementTable').innerHTML = '<div class="warning">No class-wise OD data for this origin station.</div>';
+            return;
+        }
+        let tableHtml = '<table><thead><tr><th>Destination</th>' + classes.map(c=>`<th>${escapeHtml(c)}</th>`).join('') + '<th>Total</th></tr></thead><tbody>';
+        destinations.forEach(dest => {
+            let rowTotal = 0;
+            const cols = classes.map(cl => { const v = (odByClass[dest] && odByClass[dest][cl]) || 0; rowTotal += v; return `<td>${v.toLocaleString()}</td>`; }).join('');
+            tableHtml += `<tr><td><strong>${escapeHtml(dest)}</strong></td>${cols}<td><strong>${rowTotal.toLocaleString()}</strong></td></tr>`;
+        });
+        // totals
+        tableHtml += '<tr class="rank-1"><td><strong>Total</strong></td>';
+        classes.forEach(cl => {
+            let sum = 0; destinations.forEach(dest => { sum += (odByClass[dest] && odByClass[dest][cl]) || 0; });
+            const totalSeatsForClass = classTotals[cl] || 0;
+            const displayTotal = totalSeatsForClass ? `${sum}/${totalSeatsForClass}` : `${sum}`;
+            tableHtml += `<td><strong>${displayTotal}</strong></td>`;
+        });
+        const grand = destinations.reduce((s,d)=> s + classes.reduce((ss,cl)=> ss + ((odByClass[d] && odByClass[d][cl])||0),0),0);
+        tableHtml += `<td><strong>${grand.toLocaleString()}</strong></td></tr>`;
+        tableHtml += '</tbody></table>';
+        document.getElementById('classMovementTable').innerHTML = tableHtml;
+    }
+
+    const classOriginSelector = document.getElementById('classOriginSelector');
+    if (classOriginSelector) {
+        classOriginSelector.addEventListener('change', (e) => renderClassMovementFor(e.target.value));
+        // initial render
+        renderClassMovementFor(classOriginSelector.value || TRAIN_ROUTE[0]);
+    }
+
+    const downloadClassChartBtn = document.getElementById('downloadClassChartBtn');
+    if (downloadClassChartBtn) {
+        downloadClassChartBtn.addEventListener('click', () => {
+            // reuse downloadChartAsImage for classMovementChart
+            downloadChartAsImage('classMovementChart', `class_movement_${currentReportData?.trainName?.replace(/\s/g,'_')||'report'}`, 3);
+        });
+    }
 }
 
 function renderCharts(segmentOccupancy, stationBoardings, stationDeboardings, topSegments, topODFlows) {
