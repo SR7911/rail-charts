@@ -1,3 +1,4 @@
+// IRCTC Chart Collector backup
 // IRCTC Chart Collector - All-in-One
 // Run this on irctc.co.in/online-charts AFTER entering train number and clicking the source station dropdown.
 // It extracts train info + route, then sets up the coach collector that works after redirect.
@@ -107,123 +108,33 @@
         return { trainNo, trainName, trainType, sourceStation, destinationStation, route, ...schedule, raw };
     }
 
-    function handleNetworkResponse(payload) {
-        const details = normalizeTrainDetails(payload);
-        if (details) mergeTrainInfo(details);
-    }
-
-    function normalizeStationCode(value) {
-        if (typeof value === 'string') {
-            const code = value.trim().toUpperCase().split(' ')[0].split('-')[0];
-            return code.length >= 2 && code.length <= 5 ? code : '';
-        }
-        if (!value || typeof value !== 'object') return '';
-        return normalizeStationCode(findFirstDeep(value, [
-            'stationCode', 'stnCode', 'code', 'stn', 'station', 'fromStationCode', 'toStationCode'
-        ]));
-    }
-
-    function normalizeTrainName(value) {
-        if (typeof value !== 'string') return '';
-        return value.trim().replace(/\s+/g, ' ');
-    }
-
-    function detectTrainInfoFromPage() {
-        const pageText = document.body.innerText || '';
-        const info = {};
-
-        const trainNoMatch = pageText.match(/(?:Train(?:\s*(?:No\.?|Number))|Trn\s*No\.?)\s*[:\-]?\s*(\d{2,6})\b/i);
-        if (trainNoMatch) info.trainNo = trainNoMatch[1].trim();
-
-        const trainNameMatch = pageText.match(/(?:Train\s*Name\s*[:\-]?\s*|Name\s*[:\-]?\s*|)([A-Za-z0-9][A-Za-z0-9\s&\-\/\(\)]+)/i);
-        if (trainNameMatch) {
-            const name = normalizeTrainName(trainNameMatch[1]);
-            if (name && (!info.trainNo || pageText.indexOf(name) > pageText.indexOf(info.trainNo))) {
-                info.trainName = name;
-            }
-        }
-
-        const typeMatch = pageText.match(/(Express|Superfast|Mail|Shatabdi|Rajdhani|Duronto|Garib|Jan[ ]?Shatabdi|Humsafar|AC|SF|Fast)/i);
-        if (typeMatch) info.trainType = typeMatch[1].trim();
-
-        const route = [];
-        const routeSelectors = [
-            'select[formcontrolname="sourceStation"] option',
-            'select[name="sourceStation"] option',
-            'mat-option',
-            'li[role="option"]',
-            '.cdk-overlay-pane mat-option',
-            'select option',
-            '.station-list li',
-            '.route-list li',
-            '.station-names li'
-        ];
-        for (const sel of routeSelectors) {
-            const options = Array.from(document.querySelectorAll(sel));
-            if (options.length > 0) {
-                options.forEach(opt => {
-                    const text = (opt.innerText || opt.textContent || '').trim();
-                    const code = normalizeStationCode(text);
-                    if (code && !route.includes(code)) route.push(code);
-                });
-                if (route.length > 0) break;
-            }
-        }
-
-        // Do not infer route from generic uppercase tokens in page text.
-        // That can produce false station codes like CHAIR, CAR, CC, TTE, JN.
-
-        if (route.length > 0) {
-            info.route = route;
-            info.sourceStation = route[0];
-            info.destinationStation = route[route.length - 1];
-            info.fromStation = route[0];
-            info.toStation = route[route.length - 1];
-            info.stationList = route;
-        }
-
-        const sourceInput = document.querySelector('input[formcontrolname="sourceStation"], input[name="sourceStation"], input[placeholder*="Source"], input[aria-label*="Source"]');
-        if (sourceInput && sourceInput.value) info.sourceStation = normalizeStationCode(sourceInput.value);
-
-        const destInput = document.querySelector('input[formcontrolname="destinationStation"], input[name="destinationStation"], input[placeholder*="Destination"], input[aria-label*="Destination"]');
-        if (destInput && destInput.value) info.destinationStation = normalizeStationCode(destInput.value);
-
-        const trainNoInput = document.querySelector('input[formcontrolname="trainNo"], input[name="trainNo"], input[placeholder*="Train"], input[aria-label*="Train"]');
-        if (trainNoInput && trainNoInput.value) {
-            const candidate = String(trainNoInput.value).trim();
-            const parsed = candidate.match(/(\d{2,6})/);
-            if (parsed) info.trainNo = parsed[1];
-        }
-
-        const trainNameLabel = document.querySelector('input[formcontrolname="trainName"], input[name="trainName"], [placeholder*="Train Name"], .train-name, .trainName');
-        if (trainNameLabel && trainNameLabel.value) info.trainName = normalizeTrainName(trainNameLabel.value);
-
-        return info;
-    }
-
     function mergeTrainInfo(details) {
         if (!details) return;
         const previous = JSON.parse(sessionStorage.getItem('irctcTrainInfo') || '{}');
         const merged = {
             ...previous,
-            trainNo: previous.trainNo || details.trainNo || details.trainNumber || '',
-            trainNumber: previous.trainNumber || details.trainNumber || details.trainNo || details.trainNo || '',
+            trainNo: previous.trainNo || details.trainNo || '',
             trainName: previous.trainName || details.trainName || '',
             trainType: previous.trainType || details.trainType || '',
-            sourceStation: previous.sourceStation || details.sourceStation || details.fromStation || details.route?.[0] || '',
-            destinationStation: previous.destinationStation || details.destinationStation || details.toStation || details.route?.[details.route.length - 1] || '',
-            route: Array.isArray(previous.route) && previous.route.length > 0 ? previous.route : Array.isArray(details.route) ? details.route : [],
-            runningDays: Array.isArray(previous.runningDays) && previous.runningDays.length > 0 ? previous.runningDays : Array.isArray(details.runningDays) ? details.runningDays : [],
+            sourceStation: previous.sourceStation || details.sourceStation || '',
+            destinationStation: previous.destinationStation || details.destinationStation || '',
+            route: Array.isArray(previous.route) && previous.route.length > 0 ? previous.route : details.route,
+            runningDays: Array.isArray(previous.runningDays) && previous.runningDays.length > 0 ? previous.runningDays : details.runningDays || [],
             distanceKm: previous.distanceKm || details.distanceKm || '',
             startTime: previous.startTime || details.startTime || '',
             endTime: previous.endTime || details.endTime || '',
             duration: previous.duration || details.duration || '',
-            journeyDate: previous.journeyDate || details.journeyDate || '',
-            stationList: Array.isArray(previous.stationList) && previous.stationList.length > 0 ? previous.stationList : Array.isArray(details.stationList) ? details.stationList : [],
-            trainDetails: previous.trainDetails || details.raw || details.trainDetails || null
+            trainDetailsTimeStamp: previous.trainDetailsTimeStamp || details.timeStamp || '',
+            stationList: Array.isArray(previous.stationList) && previous.stationList.length > 0 ? previous.stationList : details.stationList || [],
+            trainDetails: details.raw
         };
         sessionStorage.setItem('irctcTrainInfo', JSON.stringify(merged));
-        origLog(`%c✓ Captured train details XHR: ${merged.trainNo || 'unknown'} ${merged.trainName || ''} (${merged.route?.length || 0} stations)`, 'color:green;font-weight:bold');
+        origLog(`%c✓ Captured train details XHR: ${merged.trainNo} ${merged.trainName} (${merged.route?.length || 0} stations)`, 'color:green;font-weight:bold');
+    }
+
+    function handleNetworkResponse(payload) {
+        const details = normalizeTrainDetails(payload);
+        if (details) mergeTrainInfo(details);
     }
 
     function todayIsoDate() {
@@ -312,16 +223,12 @@
     }
 
     const previousInfo = JSON.parse(sessionStorage.getItem('irctcTrainInfo') || '{}');
-    const pageInfo = detectTrainInfoFromPage();
-    if (!trainNo) trainNo = pageInfo.trainNo || previousInfo.trainNo || '';
-    if (!trainName) trainName = pageInfo.trainName || previousInfo.trainName || '';
-    if (!trainType) trainType = pageInfo.trainType || previousInfo.trainType || '';
-    if (route.length === 0) {
-        if (Array.isArray(pageInfo.route) && pageInfo.route.length > 0) route.push(...pageInfo.route);
-        else if (Array.isArray(previousInfo.route)) route.push(...previousInfo.route);
-    }
-    const sourceStation = previousInfo.sourceStation || pageInfo.sourceStation || route[0] || '';
-    const destinationStation = previousInfo.destinationStation || pageInfo.destinationStation || route[route.length - 1] || '';
+    if (!trainNo && previousInfo.trainNo) trainNo = previousInfo.trainNo;
+    if (!trainName && previousInfo.trainName) trainName = previousInfo.trainName;
+    if (!trainType && previousInfo.trainType) trainType = previousInfo.trainType;
+    if (route.length === 0 && Array.isArray(previousInfo.route)) route.push(...previousInfo.route);
+    const sourceStation = previousInfo.sourceStation || route[0] || '';
+    const destinationStation = previousInfo.destinationStation || route[route.length - 1] || '';
 
     origLog('%c🚂 Train Info:', 'color:green;font-size:14px');
     origLog(`   No: ${trainNo} | Name: ${trainName} | Type: ${trainType}`);
@@ -499,14 +406,14 @@
             return true;
         },
         downloadJson(filename) {
-            const payload = buildPayload();
             if (!filename) {
                 const info = this.getTrainInfo();
-                const no = payload.trainNumber || payload.trainNo || info.trainNo || 'train';
+                const no = info.trainNo || 'train';
                 const now = new Date();
                 const ddmm = String(now.getDate()).padStart(2,'0') + String(now.getMonth()+1).padStart(2,'0');
                 filename = `${no} ${ddmm}.json`;
             }
+            const payload = buildPayload();
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);

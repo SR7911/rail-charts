@@ -1,0 +1,8 @@
+# Ignore Node dependencies
+node_modules/
+
+# Ignore downloaded data exports
+data/*.json
+
+env/
+*.log
