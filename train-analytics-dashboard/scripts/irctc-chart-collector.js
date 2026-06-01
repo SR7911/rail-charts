@@ -135,10 +135,10 @@
         const trainNoMatch = pageText.match(/(?:Train(?:\s*(?:No\.?|Number))|Trn\s*No\.?)\s*[:\-]?\s*(\d{2,6})\b/i);
         if (trainNoMatch) info.trainNo = trainNoMatch[1].trim();
 
-        const trainNameMatch = pageText.match(/(?:Train\s*Name\s*[:\-]?\s*|Name\s*[:\-]?\s*|)([A-Za-z0-9][A-Za-z0-9\s&\-\/\(\)]+)/i);
+        const trainNameMatch = pageText.match(/(?:Train\s*Name\s*[:\-]?\s*|Name\s*[:\-]?\s*)([A-Za-z0-9][A-Za-z0-9\s&\-\/\(\)]+)/i);
         if (trainNameMatch) {
             const name = normalizeTrainName(trainNameMatch[1]);
-            if (name && (!info.trainNo || pageText.indexOf(name) > pageText.indexOf(info.trainNo))) {
+            if (name && !/(reservation|chart|journey|details)/i.test(name) && (!info.trainNo || pageText.indexOf(name) > pageText.indexOf(info.trainNo))) {
                 info.trainName = name;
             }
         }
