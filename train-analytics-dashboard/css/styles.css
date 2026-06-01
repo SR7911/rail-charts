@@ -493,3 +493,120 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
     0% { background: rgba(102, 126, 234, 0.2); }
     100% { background: transparent; }
 }
+
+
+/* Coach Composition */
+.coach-composition-section {
+    margin: 0 20px 20px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 20px;
+}
+
+.coach-composition-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #475569;
+    margin-bottom: 12px;
+}
+
+.coach-composition-track {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+.coach-engine {
+    display: none;
+}
+
+.engine-body {
+    display: none;
+}
+
+.coach-cars-wrapper {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: 100%;
+}
+
+.coach-car {
+    display: inline-flex;
+    align-items: center;
+    cursor: default;
+}
+
+.coach-car::after {
+    content: '—';
+    color: #cbd5e1;
+    margin-left: 4px;
+    font-size: 10px;
+}
+
+.coach-car:last-child::after {
+    content: '';
+    margin: 0;
+}
+
+.coach-car:hover .coach-car-name {
+    color: #1e40af;
+}
+
+.coach-car-body {
+    display: none;
+}
+
+.coach-car-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+    padding: 4px 8px;
+    background: #f1f5f9;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.coach-car:hover .coach-car-name {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+}
+
+.coach-car-class {
+    display: none;
+}
+
+.coach-legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+}
+
+.coach-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.coach-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+@media (max-width: 768px) {
+    .coach-car-name { font-size: 11px; padding: 3px 6px; }
+}
