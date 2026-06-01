@@ -604,6 +604,75 @@ function calculateODFlows(allCoaches) {
         .sort((a, b) => b.count - a.count);
 }
 
+function buildCoachCompositionHtml(reportData) {
+    const coachPassengers = reportData.coachPassengers || {};
+    const coachNames = Object.keys(coachPassengers);
+    if (coachNames.length === 0) return '';
+
+    // Sort coaches in typical train order: engine, GEN, SL, 3A, 2A, 1A, pantry, etc.
+    const classOrder = { '1A': 1, 'EC': 2, '2A': 3, '3A': 4, '3E': 5, 'SL': 6, 'CC': 7, '2S': 8, 'GEN': 9 };
+    function getCoachClass(name) {
+        if (/^HA?\d/i.test(name)) return '1A';
+        if (/^E\d/i.test(name) || /^EC/i.test(name)) return 'EC';
+        if (/^A\d/i.test(name)) return '2A';
+        if (/^B\d/i.test(name)) return '3A';
+        if (/^S\d/i.test(name)) return 'SL';
+        if (/^C\d/i.test(name) || /^D\d/i.test(name)) return 'CC';
+        if (/^GS/i.test(name)) return 'GEN';
+        return 'OTHER';
+    }
+    function getCoachColor(cls) {
+        switch(cls) {
+            case '1A': return '#e74c3c';
+            case 'EC': return '#c0392b';
+            case '2A': return '#9b59b6';
+            case '3A': return '#3498db';
+            case '3E': return '#2980b9';
+            case 'SL': return '#27ae60';
+            case 'CC': return '#f39c12';
+            case '2S': return '#e67e22';
+            case 'GEN': return '#95a5a6';
+            default: return '#7f8c8d';
+        }
+    }
+
+    const sorted = coachNames.slice().sort((a, b) => {
+        const ca = getCoachClass(a), cb = getCoachClass(b);
+        const oa = classOrder[ca] || 99, ob = classOrder[cb] || 99;
+        if (oa !== ob) return oa - ob;
+        return a.localeCompare(b, undefined, { numeric: true });
+    });
+
+    const coachesHtml = sorted.map(name => {
+        const cls = getCoachClass(name);
+        const color = getCoachColor(cls);
+        const berths = coachPassengers[name] || 0;
+        return `<div class="coach-car" title="${escapeHtml(name)} (${cls}) - ${berths} berths">
+            <span class="coach-car-name">${escapeHtml(name)}</span>
+        </div>`;
+    }).join('');
+
+    // Build legend
+    const classesUsed = [...new Set(sorted.map(getCoachClass))];
+    const legendHtml = classesUsed.map(cls => {
+        const color = getCoachColor(cls);
+        const count = sorted.filter(n => getCoachClass(n) === cls).length;
+        return `<span class="coach-legend-item"><span class="coach-legend-dot" style="background:${color};"></span>${cls} (${count})</span>`;
+    }).join('');
+
+    return `
+        <div class="coach-composition-section">
+            <div class="coach-composition-title">Coach Composition — ${sorted.length} coaches</div>
+            <div class="coach-composition-track">
+                <div class="coach-cars-wrapper">
+                    ${coachesHtml}
+                </div>
+            </div>
+            <div class="coach-legend">${legendHtml}</div>
+        </div>
+    `;
+}
+
 function displayReport(reportData, topSegments, topODFlows, top10Boarding, top10Deboarding) {
     const seatUtilization = reportData.totalSeats > 0 
         ? Math.round((reportData.totalPassengers / reportData.totalSeats) * 100)
@@ -688,6 +757,7 @@ function displayReport(reportData, topSegments, topODFlows, top10Boarding, top10
                 <div class="train-route-dir">📍 ${escapeHtml(reportData.originStation)} → ${escapeHtml(reportData.destinationStation)}</div>
             </div>
             <div class="train-meta-detail" style="margin: -8px 20px 16px;">Route: ${routePreview}</div>
+            ${buildCoachCompositionHtml(reportData)}
             <div class="journey-overview">
                 <div class="journey-stats">${scheduleCards}</div>
                 <div class="week-view">
