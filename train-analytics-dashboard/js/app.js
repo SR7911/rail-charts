@@ -432,7 +432,8 @@ function generateReport(allCoaches) {
         if (!coach.bdd || !Array.isArray(coach.bdd)) return;
         const coachNameKey = coach.coachName || `Coach_${cIdx+1}`;
         const coachClass = coach.coachClass || coach.coach_type || coach.class || coach.type || 'Unknown';
-        coachPassengers[coachNameKey] = coach.bdd.length;
+        const coachUniqueKey = `${coachNameKey}|${coachClass}`;
+        coachPassengers[coachUniqueKey] = coach.bdd.length;
         totalSeats += coach.bdd.length;
         // accumulate seats per coach class for occupied/total display
         classSeatTotals[coachClass] = (classSeatTotals[coachClass] || 0) + coach.bdd.length;
@@ -606,16 +607,18 @@ function calculateODFlows(allCoaches) {
 
 function buildCoachCompositionHtml(reportData) {
     const coachPassengers = reportData.coachPassengers || {};
-    const coachNames = Object.keys(coachPassengers);
-    if (coachNames.length === 0) return '';
+    const coachKeys = Object.keys(coachPassengers);
+    if (coachKeys.length === 0) return '';
 
-    // Sort coaches in typical train order: engine, GEN, SL, 3A, 2A, 1A, pantry, etc.
     const classOrder = { '1A': 1, 'EC': 2, '2A': 3, '3A': 4, '3E': 5, 'SL': 6, 'CC': 7, '2S': 8, 'GEN': 9 };
-    function getCoachClass(name) {
+    function getCoachName(key) { return key.split('|')[0]; }
+    function getCoachClass(key) { return key.split('|')[1] || 'OTHER'; }
+    function getClassFromName(name) {
         if (/^HA?\d/i.test(name)) return '1A';
         if (/^E\d/i.test(name) || /^EC/i.test(name)) return 'EC';
         if (/^A\d/i.test(name)) return '2A';
         if (/^B\d/i.test(name)) return '3A';
+        if (/^M\d/i.test(name)) return '3E';
         if (/^S\d/i.test(name)) return 'SL';
         if (/^C\d/i.test(name) || /^D\d/i.test(name)) return 'CC';
         if (/^GS/i.test(name)) return 'GEN';
@@ -636,27 +639,32 @@ function buildCoachCompositionHtml(reportData) {
         }
     }
 
-    const sorted = coachNames.slice().sort((a, b) => {
-        const ca = getCoachClass(a), cb = getCoachClass(b);
-        const oa = classOrder[ca] || 99, ob = classOrder[cb] || 99;
+    // Sort: group by coach name's primary class, then by name, then by class order within same name
+    const sorted = coachKeys.slice().sort((a, b) => {
+        const nameA = getCoachName(a), nameB = getCoachName(b);
+        const primaryA = getClassFromName(nameA), primaryB = getClassFromName(nameB);
+        const oa = classOrder[primaryA] || 99, ob = classOrder[primaryB] || 99;
         if (oa !== ob) return oa - ob;
-        return a.localeCompare(b, undefined, { numeric: true });
+        const nameCmp = nameA.localeCompare(nameB, undefined, { numeric: true });
+        if (nameCmp !== 0) return nameCmp;
+        // Same coach name, sort by class order
+        const ca = classOrder[getCoachClass(a)] || 99, cb = classOrder[getCoachClass(b)] || 99;
+        return ca - cb;
     });
 
-    const coachesHtml = sorted.map(name => {
-        const cls = getCoachClass(name);
-        const color = getCoachColor(cls);
-        const berths = coachPassengers[name] || 0;
+    const coachesHtml = sorted.map(key => {
+        const name = getCoachName(key);
+        const cls = getCoachClass(key);
+        const berths = coachPassengers[key] || 0;
         return `<div class="coach-car" title="${escapeHtml(name)} (${cls}) - ${berths} berths">
             <span class="coach-car-name">${escapeHtml(name)}</span>
         </div>`;
     }).join('');
 
-    // Build legend
-    const classesUsed = [...new Set(sorted.map(getCoachClass))];
+    const classesUsed = [...new Set(sorted.map(k => getClassFromName(getCoachName(k))))];
     const legendHtml = classesUsed.map(cls => {
         const color = getCoachColor(cls);
-        const count = sorted.filter(n => getCoachClass(n) === cls).length;
+        const count = sorted.filter(k => getClassFromName(getCoachName(k)) === cls).length;
         return `<span class="coach-legend-item"><span class="coach-legend-dot" style="background:${color};"></span>${cls} (${count})</span>`;
     }).join('');
 

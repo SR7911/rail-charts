@@ -470,11 +470,11 @@
     }
 
     function addCoach(obj) {
-        const key = obj.coachName || JSON.stringify(obj).slice(0, 100);
+        const key = (obj.coachName || '') + '|' + (obj.coachClass || obj.class || '');
         if (seenKeys.has(key)) return;
         seenKeys.add(key);
         coaches.push(enrichCoach(obj));
-        origLog(`%c✓ Captured: ${key} (${coaches.length} total)`, 'color:green;font-weight:bold');
+        origLog(`%c✓ Captured: ${obj.coachName} [${obj.coachClass || obj.class || ''}] (${coaches.length} total)`, 'color:green;font-weight:bold');
     }
 
     window.irctcChartCollector = {

@@ -284,11 +284,11 @@
         if (!payload || !Array.isArray(payload.vbd)) return;
         const coachData = convertVbdToCoachFormat(payload);
         for (const coach of coachData) {
-            const key = coach.coachName;
+            const key = (coach.coachName || '') + '|' + (coach.coachClass || '');
             if (seenCoaches.has(key)) continue;
             seenCoaches.add(key);
             coaches.push(coach);
-            origLog(`%c\u2713 Captured: ${key} (${coach.coachClass}) \u2014 ${coach.bdd.length} berths | Total coaches: ${coaches.length}`, 'color:#22c55e;font-weight:bold');
+            origLog(`%c\u2713 Captured: ${coach.coachName} [${coach.coachClass}] \u2014 ${coach.bdd.length} berths | Total coaches: ${coaches.length}`, 'color:#22c55e;font-weight:bold');
         }
     }
 
